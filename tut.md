@@ -7,21 +7,23 @@
 2. Open up the browser console (F12 or right-click -> Inspect) and paste this code:
 
 ```javascript
-const divMessagesWrapper = document.querySelector(
-  "#app-mount > div.appAsidePanelWrapper_a3002d > div.notAppAsidePanel_a3002d > div.app_a3002d > div > div.layers__960e4.layers__160d8 > div > div > div > div > div.chat_f75fb0 > div.content_f75fb0 > main > div.messagesWrapper__36d07.group-spacing-16"
-).outerHTML;
-console.log("Loading messages...");
+const imageLinks = document.querySelectorAll("a.originalLink_af017a");
+console.log("Loading image elements...");
+
+let imageElements = "";
+imageLinks.forEach((link) => {
+  imageElements += link.outerHTML + "\n";
+});
+
 const textarea = document.createElement("textarea");
-textarea.value = divMessagesWrapper;
+textarea.value = imageElements;
 document.body.appendChild(textarea);
 textarea.select();
 document.execCommand("copy");
 document.body.removeChild(textarea);
-console.log("✅ Success: Content copied to clipboard!");
+console.log(
+  `✅ Success: ${imageLinks.length} image elements copied to clipboard!`
+);
 ```
 
-3. Replace the text in `page.html` with the text you copied from your clipboard
-
-4. Run the script
-
-5. Done! Your images/GIFs will be downloaded.
+3. Replace the text in `page.html`

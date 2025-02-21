@@ -3,6 +3,8 @@ const fs = require("fs");
 const cheerio = require("cheerio");
 const path = require("path");
 const readline = require("readline");
+const pLimit = require("p-limit");
+const cliProgress = require("cli-progress");
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -19,15 +21,11 @@ const html = fs.readFileSync("./page.html", "utf8");
 // Parse HTML with cheerio
 const $ = cheerio.load(html);
 
-// Extract image URLs from <a> tags with class 'originalLink_af017a'
-const imageLinks = $("a.originalLink_af017a");
-const imageUrls = [];
-imageLinks.each((i, link) => {
-  const src = $(link).attr("href");
-  if (src) {
-    imageUrls.push(src);
-  }
-});
+// Extract image URLs directly from href attributes
+const imageUrls = $("a.originalLink_af017a")
+  .map((i, link) => $(link).attr("href"))
+  .get()
+  .filter((url) => url); // Remove any undefined/null values
 
 if (imageUrls.length === 0) {
   console.log('No images found with class "originalLink_af017a"');
@@ -90,13 +88,50 @@ async function downloadAllImages() {
   try {
     const outputDir = await getFolderPath();
     console.log(
-      `Starting download of ${imageUrls.length} images to ${outputDir}...`
+      `Starting concurrent download of ${imageUrls.length} images to ${outputDir}...`
     );
 
-    for (let i = 0; i < imageUrls.length; i++) {
-      await downloadGif(imageUrls[i], i.toString(), outputDir);
-    }
-    console.log("All downloads complete!");
+    // Create progress bar
+    const progressBar = new cliProgress.SingleBar({
+      format:
+        "Downloading [{bar}] {percentage}% | {value}/{total} images | ETA: {eta}s",
+      barCompleteChar: "=",
+      barIncompleteChar: "-",
+    });
+    progressBar.start(imageUrls.length, 0);
+
+    // Set up concurrency limit (6 simultaneous downloads)
+    const limit = pLimit(6);
+    let completed = 0;
+
+    // Create an array of limited download promises
+    const downloadPromises = imageUrls.map((url, i) =>
+      limit(() =>
+        downloadGif(url, i.toString(), outputDir)
+          .then(() => {
+            completed++;
+            progressBar.update(completed);
+          })
+          .catch((error) => {
+            console.error(`\nFailed to download image ${i}: ${error.message}`);
+            completed++;
+            progressBar.update(completed);
+            return null;
+          })
+      )
+    );
+
+    // Wait for all downloads to complete
+    const results = await Promise.allSettled(downloadPromises);
+
+    progressBar.stop();
+
+    const successful = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+
+    console.log(
+      `\nDownloads complete! Successfully downloaded: ${successful}, Failed: ${failed}`
+    );
   } finally {
     rl.close();
   }
